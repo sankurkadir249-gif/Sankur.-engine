@@ -27,12 +27,11 @@ jobs:
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
-          export PATH=$PWD/gradle-8.5/bin:$PATH
-          gradle wrapper --gradle-version 8.5 --distribution-type bin
 
       - name: Proje iskeleti olustur
         run: |
           mkdir -p app/src/main/cpp app/src/main/res/values
+          echo "sdk.dir=$HOME/android-sdk" > local.properties
           cat > settings.gradle << 'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           rootProject.name = 'Oyun'
@@ -85,11 +84,10 @@ jobs:
             -exec cp --parents {} app/src/main/cpp/ \;
 
       - name: APK derle
-        run: ./gradlew assembleRelease
+        run: $PWD/gradle-8.5/bin/gradle assembleRelease
 
       - uses: actions/upload-artifact@v4
         with:
           name: oyun-apk
           path: app/build/outputs/apk/release/*.apk
-          
           
