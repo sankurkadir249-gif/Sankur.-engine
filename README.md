@@ -1,0 +1,22 @@
+name: Build APK
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Install NDK
+        run: sdkmanager "ndk;26.1.10909125"
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oyun-apk
+          path: app/build/outputs/apk/release/*.apk
