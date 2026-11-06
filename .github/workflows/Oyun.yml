@@ -2,21 +2,94 @@ name: Build APK
 on: [push]
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-      - name: Install NDK
-        run: sdkmanager "ndk;26.1.10909125"
-      - name: Build APK
+
+      - name: Android SDK kur
         run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease
+          sudo apt-get update && sudo apt-get install -y wget unzip
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip -d $ANDROID_HOME/cmdline-tools
+          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653"
+
+      - name: Gradle kur
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          unzip -q gradle-8.5-bin.zip
+          export PATH=$PWD/gradle-8.5/bin:$PATH
+          gradle wrapper --gradle-version 8.5 --distribution-type bin
+
+      - name: Proje iskeleti olustur
+        run: |
+          mkdir -p app/src/main/cpp app/src/main/res/values
+          cat > settings.gradle << 'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          rootProject.name = 'Oyun'
+          include ':app'
+          EOF
+          cat > app/build.gradle << 'EOF'
+          plugins { id 'com.android.application' version '8.2.2' }
+          android {
+              namespace 'com.sankur.oyun'
+              compileSdk 34
+              defaultConfig {
+                  applicationId 'com.sankur.oyun'
+                  minSdk 24
+                  targetSdk 34
+                  externalNativeBuild { cmake { cppFlags '-std=c++17' } }
+              }
+              externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt' } }
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application android:label="Oyun" android:hasCode="false">
+                  <activity android:name="android.app.NativeActivity"
+                      android:exported="true"
+                      android:configChanges="orientation|keyboardHidden|screenSize">
+                      <meta-data android:name="android.app.lib_name" android:value="game"/>
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          cat > app/src/main/cpp/CMakeLists.txt << 'EOF'
+          cmake_minimum_required(VERSION 3.22)
+          project(game)
+          file(GLOB_RECURSE SRC CONFIGURE_DEPENDS *.cpp *.c)
+          add_library(game SHARED ${SRC}
+              ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
+          target_include_directories(game PRIVATE
+              ${ANDROID_NDK}/sources/android/native_app_glue)
+          target_link_libraries(game android log EGL GLESv2)
+          EOF
+
+      - name: Motor kodlarini kopyala
+        run: |
+          find . \( -name '*.cpp' -o -name '*.c' -o -name '*.h' -o -name '*.hpp' \) \
+            -not -path './app/*' -not -path './.git/*' -not -path './gradle-*/*' \
+            -exec cp --parents {} app/src/main/cpp/ \;
+
+      - name: APK derle
+        run: ./gradlew assembleRelease
+
       - uses: actions/upload-artifact@v4
         with:
           name: oyun-apk
           path: app/build/outputs/apk/release/*.apk
+          
           
